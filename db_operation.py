@@ -52,3 +52,25 @@ def delete_link(url):
 
     cursor.close()
     baglanti.close()
+
+    def haberleri_kaydet(haberler):
+        baglanti = baglanti_get()
+        cursor = baglanti.cursor()
+
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS haberler (
+            id SERIAL PRIMARY KEY,
+            baslik TEXT NOT NULL,
+            link TEXT NOT NULL UNIQUE
+        );
+    """)
+        for haber in haberler:
+            cursor.execute("""
+                    INSERT INTO haberler (baslik, link)
+                    VALUES (%s, %s)
+                    ON CONFLICT (link) DO NOTHING;
+                """, (haber["baslik"], haber["link"]))
+
+        baglanti.commit()
+        cursor.close()
+        baglanti.close()
