@@ -1,39 +1,27 @@
-import os
-import psycopg2
-import requests
-from bs4 import BeautifulSoup
-from dotenv import load_dotenv
-def get_link():
+import db_operation
+import scraper
 
-    load_dotenv()
 
-    baglanti = psycopg2.connect(
-        database=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        host=os.getenv("DB_HOST"),
-        port="5432",
-    )
-    cursor = baglanti.cursor()
-    cursor.execute("CREATE TABLE IF NOT EXISTS kaynaklar (id SERIAL PRIMARY KEY, url TEXT NOT NULL);")
-    cursor.execute("SELECT url FROM kaynaklar;")
+def calistir():
+    print(" RSS Botu çalıştırılıyor \n")
 
-    url_list = [satir[0] for satir in cursor.fetchall()]
-    cursor.close()
-    baglanti.close()
-    return url_list
-print(" Linkler veritabanından çekildi \n")
-url_list = get_link()
-for url in url_list:
-    print(f"=== {url} taranıyor ===")
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, features="xml")
-    makale_listesi = soup.find_all("item")
+    kaynaklar = db_operation.get_links()
 
-    for makale in makale_listesi:
-        baslik = makale.title.text if makale.title else "Başlık Yok"
-        link = makale.link.text if makale.link else "Link Yok"
+    if not kaynaklar:
+        print(" Veritabanında kayıtlı hiç RSS adresi bulunamadı.")
+        print(" İpucu: Önce veritabanına bir RSS adresi eklemelisiniz.")
+        return
 
-        print("Başlık:", baslik)
-        print("Link:", link)
-        print("-" * 15)
+    print(f" Veritabanından {len(kaynaklar)} adet RSS kaynağı alındı. Tarama başlıyor")
+
+    haberler = scraper.rss_tara(kaynaklar)
+
+    if haberler:
+        db_operation.haberleri_kaydet(haberler)
+        print(f"\n İşlem tamamlandı Toplam {len(haberler)} haber veritabanına işlendi.")
+    else:
+        print("\n Taranan kaynaklarda yeni bir haber bulunamadı.")
+
+
+if __name__ == "__main__":
+    calistir()
