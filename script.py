@@ -1,7 +1,6 @@
 import db_operation
 import scraper
 
-
 def calistir():
     print(" RSS Botu çalıştırılıyor \n")
 

@@ -53,7 +53,7 @@ def delete_link(url):
     cursor.close()
     baglanti.close()
 
-    def haberleri_kaydet(haberler):
+def haberleri_kaydet(haberler):
         baglanti = baglanti_get()
         cursor = baglanti.cursor()
 
