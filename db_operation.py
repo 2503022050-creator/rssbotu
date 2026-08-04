@@ -1,5 +1,6 @@
 import os
 import psycopg2
+from telegram_notifier import telegrama_haber_gonder
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -33,12 +34,12 @@ def add_link(url):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
-    # güvenli SQL ekleme sorgusu
     cursor.execute("INSERT INTO kaynaklar (url) VALUES (%s);", (url,))
     baglanti.commit()
-
+    telegrama_haber_gonder("Yeni Haber", url)
     cursor.close()
     baglanti.close()
+
 
 
 def delete_link(url):
