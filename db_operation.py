@@ -72,6 +72,9 @@ def haberleri_kaydet(haberler):
                     ON CONFLICT (link) DO NOTHING;
                 """, (haber["baslik"], haber["link"]))
 
+            if cursor.rowcount > 0:
+                telegrama_haber_gonder(haber["baslik"], haber["link"])
+
         baglanti.commit()
         cursor.close()
         baglanti.close()
