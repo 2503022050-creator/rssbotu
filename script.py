@@ -1,6 +1,6 @@
 import db_operation
 import scraper
-
+import time
 def calistir():
     print(" RSS Botu çalıştırılıyor \n")
 
@@ -23,4 +23,9 @@ def calistir():
 
 
 if __name__ == "__main__":
-    calistir()
+    while True:
+        calistir()
+
+        print("\n Tarama bitti. 1 saat  bekleniyor.\n")
+
+        time.sleep(3600)
