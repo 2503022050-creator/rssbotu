@@ -1,12 +1,16 @@
 import db_operation
 import scraper
+import telebot
+
+bot = telebot.TeleBot("8614879384:AAFk5rv64rI_g6dgHU6zWV3S75EN2PJsJz0")
+
 def calistir():
     print(" RSS Botu çalıştırılıyor \n")
 
     kaynaklar = db_operation.get_links()
 
     if not kaynaklar:
-        print(" Veritabanında kayıtlı hiç RSS adresi bulunamadı.")
+        print(" Veritabanında kayıtlı RSS adresi bulunamadı.")
         print(" İpucu: Önce veritabanına bir RSS adresi eklemelisiniz.")
         return
 
@@ -21,5 +25,13 @@ def calistir():
         print("\n Taranan kaynaklarda yeni bir haber bulunamadı.")
 
 
+@bot.message_handler(commands=['haber'])
+def haberleri_getir(message):
+    bot.reply_to(message, " Son 24 saatin haberleri toplanıyor..")
+    calistir()
+
+    bot.send_message(message.chat.id, " Tarama tamamlandı")
+
 if __name__ == "__main__":
-     calistir()
+    print(" Telegram'dan mesaj bekleniyor..")
+    bot.infinity_polling()
