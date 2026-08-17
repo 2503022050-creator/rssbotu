@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 import scraper
 import db_operation
 
-load_dotenv() 
+load_dotenv()
 
 token = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(token)
@@ -39,10 +39,17 @@ def karsilama(message):
 # /haber komutu
 @bot.message_handler(commands=['haber'])
 def haberleri_getir(message):
-    bot.reply_to(message, " Son 24 saatin haberleri toplanıyor..")
+    bot.reply_to(message, "Son haberler taranıyor..")
 
-    #Komutu yazan kişinin Telegram ID'si
-    calistir(message.chat.id)
+    calistir()
+
+    son_haberler = db_operation.son_haberleri_getir(limit=20)
+
+    if son_haberler:
+        for baslik, link in son_haberler:
+            bot.send_message(message.chat.id, f"{baslik}\n{link}")
+    else:
+        bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")
 
     bot.send_message(message.chat.id, " Tarama tamamlandı")
 

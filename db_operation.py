@@ -79,3 +79,13 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None):
     baglanti.commit()
     cursor.close()
     baglanti.close()
+
+
+def son_haberleri_getir(limit=20):
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+    cursor.execute("SELECT baslik, link FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
+    haberler = cursor.fetchall()
+    cursor.close()
+    baglanti.close()
+    return haberler
