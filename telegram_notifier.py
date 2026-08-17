@@ -1,12 +1,15 @@
-import os
+import os #gizli şifreleri okumak için
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()#şifreleri gizli dosyadan güvenli okumak için
 
-def telegrama_haber_gonder(baslik, link):
+
+def telegrama_haber_gonder(baslik, link, gonderilecek_kisi=None):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+#Gelen bir ID yoksa sistem aksamadan çalışsın diye haberleri yedek adres olarak .env dosyasına yollar
+    chat_id = gonderilecek_kisi if gonderilecek_kisi else os.getenv("TELEGRAM_CHAT_ID")
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     mesaj = f"{baslik}\n{link}"

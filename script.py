@@ -1,34 +1,48 @@
-import db_operation
-import scraper
+import os
 import telebot
+from dotenv import load_dotenv
+import scraper
+import db_operation
 
-bot = telebot.TeleBot("8614879384:AAFk5rv64rI_g6dgHU6zWV3S75EN2PJsJz0")
+load_dotenv() 
 
-def calistir():
-    print(" RSS Botu çalıştırılıyor \n")
+token = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = telebot.TeleBot(token)
 
+
+def calistir(isteyen_kisi_id=None):
     kaynaklar = db_operation.get_links()
 
     if not kaynaklar:
-        print(" Veritabanında kayıtlı RSS adresi bulunamadı.")
-        print(" İpucu: Önce veritabanına bir RSS adresi eklemelisiniz.")
+        print("Veritabanında kayıtlı RSS adresi bulunamadı.")
+        print("Veritabanına bir RSS adresi eklemelisiniz.")
         return
 
-    print(f" Veritabanından {len(kaynaklar)} adet RSS kaynağı alındı. Tarama başlıyor")
-
+    print(f"Veritabanından {len(kaynaklar)} adet RSS kaynağı alındı. Tarama başlıyor")
     haberler = scraper.rss_tara(kaynaklar)
 
     if haberler:
-        db_operation.haberleri_kaydet(haberler)
+        #Komutu yazan kişinin ID'sini veritabanı fonksiyonuna iletiyor
+        db_operation.haberleri_kaydet(haberler, isteyen_kisi_id)
         print(f"\n İşlem tamamlandı Toplam {len(haberler)} haber veritabanına işlendi.")
     else:
         print("\n Taranan kaynaklarda yeni bir haber bulunamadı.")
 
 
+# /start komutu,Karşılama Mesajı
+@bot.message_handler(commands=['start'])
+def karsilama(message):
+    bot.reply_to(message,
+                 "Son 24 saatteki güncel haberleri okumak için /haber yazmanız yeterlidir.")
+
+
+# /haber komutu
 @bot.message_handler(commands=['haber'])
 def haberleri_getir(message):
     bot.reply_to(message, " Son 24 saatin haberleri toplanıyor..")
-    calistir()
+
+    #Komutu yazan kişinin Telegram ID'si
+    calistir(message.chat.id)
 
     bot.send_message(message.chat.id, " Tarama tamamlandı")
 
