@@ -3,12 +3,20 @@ import telebot #Telegram Bot API'si ile kodumuz arasında iletişim köprüsü
 from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'ın okuyabileceği formata getirme
 import scraper
 import db_operation
+from telebot.types import BotCommand, ForceReply
 
 load_dotenv()#env dosyasını okuyarak içindeki gizli şifreleri aktif hale getirir
 
 token = os.getenv("TELEGRAM_BOT_TOKEN")
 bot = telebot.TeleBot(token)
-
+#bot menü kısmı
+bot.set_my_commands([
+    BotCommand("haber", "Son haberleri getir"),
+    BotCommand("kaynaklar", "Kayıtlı kaynakları listele"),
+    BotCommand("ekle", "Yeni kaynak ekle"),
+    BotCommand("sil", "Kayıtlı kaynak sil"),
+    BotCommand("start", "Başlangıç mesajı")
+])
 
 def calistir(isteyen_kisi_id=None):
     kaynaklar = db_operation.get_links()
@@ -51,38 +59,58 @@ def kaynaklar_getir(message):
 
 #kaynak ekleme
 @bot.message_handler(commands=['ekle'])
-def kaynak_ekle(message):
-    parcalar = message.text.split()
+def kaynak_ekle_sor(message):
+    mesaj=bot.reply_to(message,"Eklemek istediğiniz RSS linkini yazınız.",reply_markup=ForceReply())
+    bot.register_next_step_handler(mesaj, kaynak_ekle_kaydet)#sonraki adımı kaydetmek için
 
-    if len(parcalar) > 1:
-        yeni_url = parcalar[1]
-        mevcut_kaynaklar=db_operation.get_links()
+def kaynak_ekle_kaydet(message):
+    yeni_url=message.text.strip()#Metnin başındaki ve sonundaki görünmeyen karakterlerini kırpar.
 
-        if yeni_url in mevcut_kaynaklar:
-            bot.reply_to(message, "Bu kaynak lisetede mevcut.")
-        else:
-            db_operation.add_link(yeni_url)
-            bot.reply_to(message, f"Yeni kaynak eklendi:\n{yeni_url}")
+    #Kullanıcı link yerine başka bir komut girdiyse işlemi iptal et
+    if yeni_url.startswith('/'):
+        bot.process_new_messages([message])
+        return
+
+    #Gelen metnin geçerli bir RSS linki olup olmadığını kontrol et
+    if not (yeni_url.startswith("http://") or yeni_url.startswith("https://")):
+        bot.reply_to(message, "Geçersiz link.Gönderdiğiniz metin 'http://' veya 'https://' ile başlamalıdır.")
+        return
+
+    mevcut_kaynaklar = db_operation.get_links()
+    if yeni_url in mevcut_kaynaklar:
+        bot.reply_to(message, "Bu kaynak listede mevcut.")
     else:
-        bot.reply_to(message, "Lütfen bir link belirtin. ")
+        db_operation.add_link(yeni_url)
+        bot.reply_to(message, f" Yeni kaynak eklendi:\n{yeni_url}")
 
 
 #kaynak silme
 @bot.message_handler(commands=['sil'])
-def kaynak_sil(message):
-    parcalar = message.text.split()
+def kaynak_sil_sor(message):
+    mesaj = bot.reply_to(message,"Silmek istediğiniz RSS linkini yazınız.",reply_markup=ForceReply())
+    bot.register_next_step_handler(mesaj, kaynak_sil_tamamla)
 
-    if len(parcalar) > 1:
-        silinecek_url = parcalar[1]
-        mevcut_kaynaklar = db_operation.get_links()
 
-        if silinecek_url in mevcut_kaynaklar:
-            db_operation.delete_link(silinecek_url)
-            bot.reply_to(message, f"Kaynak silindi:\n{silinecek_url}")
-        else:
-            bot.reply_to(message, " Bu kaynak listenizde zaten bulunmuyor.")
+def kaynak_sil_tamamla(message):
+    silinecek_url = message.text.strip()
+
+    #Kullanıcı link yerine başka bir komut girdiyse, o komutu direkt çalıştır
+    if silinecek_url.startswith('/'):
+        bot.process_new_messages([message])
+        return
+
+    if not (silinecek_url.startswith("http://") or silinecek_url.startswith("https://")):
+        bot.reply_to(message,
+                     " Geçersiz link formatı.'http://' veya 'https://' ile başlayan geçerli bir RSS linki giriniz.")
+        return
+
+    mevcut_kaynaklar = db_operation.get_links()
+
+    if silinecek_url in mevcut_kaynaklar:
+        db_operation.delete_link(silinecek_url)
+        bot.reply_to(message, f"Kaynak silindi:\n{silinecek_url}")
     else:
-        bot.reply_to(message, "Lütfen silinecek bir link belirtin.")
+        bot.reply_to(message, "Bu kaynak listenizde zaten bulunmuyor.")
 
 #haber komutu
 @bot.message_handler(commands=['haber'])
