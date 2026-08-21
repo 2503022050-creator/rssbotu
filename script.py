@@ -54,7 +54,7 @@ def karsilama(message):
 @bot.message_handler(commands=['kaynaklar'])
 def kaynaklar_getir(message):
     siteler = db_operation.get_links()
-    bot.send_message(message.chat.id, f"Kayıtlı Kaynaklar:\n{siteler}")
+    bot.send_message(message.chat.id, f"Kayıtlı Kaynaklar:\n{siteler}", disable_web_page_preview=True)
 
 
 #kaynak ekleme
@@ -119,11 +119,12 @@ def haberleri_getir(message):
     bot.send_message(message.chat.id, "Son haberler taranıyor..")
     calistir()
 
-    son_haberler = db_operation.son_haberleri_getir(limit=20)
+    son_haberler = db_operation.son_haberleri_getir(limit=30)
 
     if son_haberler:
-        for baslik, link in son_haberler:
-            bot.send_message(message.chat.id, f"{baslik}\n{link}")
+        bot.send_message(message.chat.id, f"{len(son_haberler)} haber bulundu.")
+        for index, (baslik, link) in enumerate(son_haberler, start=1):
+            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}",disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")
 
