@@ -1,5 +1,5 @@
 import time
-from email.utils import parsedate_tz, mktime_tz
+from email.utils import parsedate_tz, mktime_tz #tarih/saat hesabı
 import requests
 from bs4 import BeautifulSoup
 
@@ -14,10 +14,11 @@ def rss_tara(url_list):
             haber_kutulari = xml_icerik.find_all("item")
 
             for haber in haber_kutulari:
-                baslik = haber.title.text if haber.title else "Başlık yok"
+                title = haber.title.text if haber.title else "Başlık yok"
                 link = haber.link.text if haber.link else "Link yok"
-            #24 saat filtresi
-                pub_date = haber.find("pubDate")
+                #24 saat filtresi
+                #farklı RSS formatlarını destekleyen esnek arama:
+                pub_date = haber.find("pubDate") or haber.find("published") or haber.find("dc:date")
                 if pub_date:
                     parsed_date = parsedate_tz(pub_date.text)
                     if parsed_date:
@@ -29,7 +30,8 @@ def rss_tara(url_list):
 
                 haberler.append({
                     "link": link,
-                    "baslik": baslik
+                    "title": title,
+                    "pub_date": pub_date.text if pub_date else None#!!!!!
                 })
         except Exception as e:
             print(f"Hata {url} adresinden veri çekilemedi: {e}")

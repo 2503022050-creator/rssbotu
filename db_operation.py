@@ -36,7 +36,6 @@ def add_link(url):
 
     cursor.execute("INSERT INTO kaynaklar (url) VALUES (%s);", (url,))
     baglanti.commit()
-    telegrama_haber_gonder("Yeni Haber", url)
     cursor.close()
     baglanti.close()
 
@@ -54,37 +53,39 @@ def delete_link(url):
     cursor.close()
     baglanti.close()
 
-def haberleri_kaydet(haberler, gonderilecek_kisi=None):
+def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS haberler (
         id SERIAL PRIMARY KEY,
-        baslik TEXT NOT NULL,
-        link TEXT NOT NULL UNIQUE
+        title TEXT NOT NULL,
+        link TEXT NOT NULL UNIQUE,
+        pub_date TEXT,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP   
     );
     """)
 
     for haber in haberler:
         cursor.execute("""
-            INSERT INTO haberler (baslik, link)
-            VALUES (%s, %s)
+            INSERT INTO haberler (title, link, pub_date)
+            VALUES (%s, %s, %s)
             ON CONFLICT (link) DO NOTHING;
-        """, (haber["baslik"], haber["link"]))
+        """, (haber["title"], haber["link"], haber.get("pub_date")))
 
-        if cursor.rowcount > 0:  # haber yeni ise sayac 1 olur
-            telegrama_haber_gonder(haber["baslik"], haber["link"], gonderilecek_kisi)
+        # Sadece bildirim=True ise ve yeni haber eklendiyse anlık mesaj atar
+        if cursor.rowcount > 0 and bildirim:
+            telegrama_haber_gonder(haber["title"], haber["link"], gonderilecek_kisi)
 
     baglanti.commit()
     cursor.close()
     baglanti.close()
 
-
-def son_haberleri_getir(limit=20):
+def son_haberleri_getir(limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
-    cursor.execute("SELECT baslik, link FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
+    cursor.execute("SELECT title, link FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()

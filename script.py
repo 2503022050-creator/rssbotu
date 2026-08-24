@@ -1,4 +1,6 @@
 import os
+import time
+
 import telebot #Telegram Bot API'si ile kodumuz arasında iletişim köprüsü
 from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'ın okuyabileceği formata getirme
 import scraper
@@ -18,24 +20,22 @@ bot.set_my_commands([
     BotCommand("start", "Başlangıç mesajı")
 ])
 
-def calistir(isteyen_kisi_id=None):
+def calistir(isteyen_kisi_id=None, bildirim=True):
     kaynaklar = db_operation.get_links()
 
     if not kaynaklar:
         print("Veritabanında kayıtlı RSS adresi bulunamadı.")
-        print("Veritabanına bir RSS adresi eklemelisiniz.")
         return
 
     print(f"Veritabanından {len(kaynaklar)} adet RSS kaynağı alındı. Tarama başlıyor")
     haberler = scraper.rss_tara(kaynaklar)
 
     if haberler:
-        #Komutu yazan kişinin ID'sini veritabanı fonksiyonuna iletiyor
-        db_operation.haberleri_kaydet(haberler, isteyen_kisi_id)
+        # bildirim durumunu db_operation'a aktarıyoruz
+        db_operation.haberleri_kaydet(haberler, isteyen_kisi_id, bildirim=bildirim)
         print(f"\n İşlem tamamlandı Toplam {len(haberler)} haber veritabanına işlendi.")
     else:
         print("\n Taranan kaynaklarda yeni bir haber bulunamadı.")
-
 
 #start komutu,Karşılama Mesajı
 @bot.message_handler(commands=['start'])
@@ -54,7 +54,16 @@ def karsilama(message):
 @bot.message_handler(commands=['kaynaklar'])
 def kaynaklar_getir(message):
     siteler = db_operation.get_links()
-    bot.send_message(message.chat.id, f"Kayıtlı Kaynaklar:\n{siteler}", disable_web_page_preview=True)
+
+    if not siteler: #liste boşsa hata olmaması için
+        bot.send_message(message.chat.id, "Kayıtlı RSS kaynağı bulunamadı.")
+        return
+
+    #linkleri alt alta ve numaralandırarak sıralama
+    liste_metni = "\n".join([f"{index}. {url}" for index, url in enumerate(siteler, start=1)])
+    mesaj_metni = f"Kayıtlı Kaynaklar ({len(siteler)} Adet):\n\n{liste_metni}"
+
+    bot.send_message(message.chat.id, mesaj_metni, disable_web_page_preview=True)
 
 
 #kaynak ekleme
@@ -115,16 +124,18 @@ def kaynak_sil_tamamla(message):
 #haber komutu
 @bot.message_handler(commands=['haber'])
 def haberleri_getir(message):
-
     bot.send_message(message.chat.id, "Son haberler taranıyor..")
-    calistir()
 
-    son_haberler = db_operation.son_haberleri_getir(limit=30)
+    # Anlık tekli bildirimlerin düşmesini engellemek için bildirim=False veriyoruz
+    calistir(bildirim=False)
+
+    son_haberler = db_operation.son_haberleri_getir()
 
     if son_haberler:
         bot.send_message(message.chat.id, f"{len(son_haberler)} haber bulundu.")
         for index, (baslik, link) in enumerate(son_haberler, start=1):
-            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}",disable_web_page_preview=True)
+            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}",
+                             disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")
 
