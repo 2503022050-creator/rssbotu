@@ -31,6 +31,7 @@ def rss_tara(url_list):
                 haberler.append({
                     "link": link,
                     "title": title,
+                    "kaynak_url": url,
                     "pub_date": pub_date.text if pub_date else None#!!!!!
                 })
         except Exception as e:

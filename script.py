@@ -1,6 +1,4 @@
 import os
-import time
-
 import telebot #Telegram Bot API'si ile kodumuz arasında iletişim köprüsü
 from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'ın okuyabileceği formata getirme
 import scraper
@@ -72,26 +70,31 @@ def kaynak_ekle_sor(message):
     mesaj=bot.reply_to(message,"Eklemek istediğiniz RSS linkini yazınız.",reply_markup=ForceReply())
     bot.register_next_step_handler(mesaj, kaynak_ekle_kaydet)#sonraki adımı kaydetmek için
 
-def kaynak_ekle_kaydet(message):
-    yeni_url=message.text.strip()#Metnin başındaki ve sonundaki görünmeyen karakterlerini kırpar.
 
-    #Kullanıcı link yerine başka bir komut girdiyse işlemi iptal et
+def kaynak_ekle_kaydet(message):
+    yeni_url = message.text.strip()  # Metnin başındaki ve sonundaki görünmeyen karakterlerini kırpar.
+
+    #kullanıcı link yerine başka bir komut girdiyse işlemi iptal et
     if yeni_url.startswith('/'):
         bot.process_new_messages([message])
         return
 
-    #Gelen metnin geçerli bir RSS linki olup olmadığını kontrol et
+    #gelen metnin geçerli bir RSS linki olup olmadığını kontrol et
     if not (yeni_url.startswith("http://") or yeni_url.startswith("https://")):
-        bot.reply_to(message, "Geçersiz link.Gönderdiğiniz metin 'http://' veya 'https://' ile başlamalıdır.")
+        bot.reply_to(message, "Geçersiz link. Gönderdiğiniz metin 'http://' veya 'https://' ile başlamalıdır.")
         return
 
     mevcut_kaynaklar = db_operation.get_links()
     if yeni_url in mevcut_kaynaklar:
         bot.reply_to(message, "Bu kaynak listede mevcut.")
     else:
-        db_operation.add_link(yeni_url)
-        bot.reply_to(message, f" Yeni kaynak eklendi:\n{yeni_url}")
+        #kullanıcı adını Telegram mesajından yakalıyoruz
+        ekleyen_kisi = message.from_user.username or message.from_user.first_name
 
+        #veritabanına hem linki hem de ekleyen kişiyi gönderiyoruz
+        db_operation.add_link(yeni_url, ekleyen_kisi)
+
+        bot.reply_to(message, f"Yeni kaynak eklendi:\n{yeni_url}\n(Ekleyen: {ekleyen_kisi})")
 
 #kaynak silme
 @bot.message_handler(commands=['sil'])
@@ -105,7 +108,7 @@ def kaynak_sil_tamamla(message):
 
     #Kullanıcı link yerine başka bir komut girdiyse, o komutu direkt çalıştır
     if silinecek_url.startswith('/'):
-        bot.process_new_messages([message])
+        bot.process_new_messages([message]) #ardarda komut verdiğimizde sıkıntı çıkmasın diye
         return
 
     if not (silinecek_url.startswith("http://") or silinecek_url.startswith("https://")):
@@ -126,15 +129,14 @@ def kaynak_sil_tamamla(message):
 def haberleri_getir(message):
     bot.send_message(message.chat.id, "Son haberler taranıyor..")
 
-    # Anlık tekli bildirimlerin düşmesini engellemek için bildirim=False veriyoruz
-    calistir(bildirim=False)
+    calistir(bildirim=False)#aynı haber için iki defa bildirim gitmesini engellemek için
 
     son_haberler = db_operation.son_haberleri_getir()
 
     if son_haberler:
         bot.send_message(message.chat.id, f"{len(son_haberler)} haber bulundu.")
-        for index, (baslik, link) in enumerate(son_haberler, start=1):
-            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}",
+        for index, (baslik, link, kaynak_url) in enumerate(son_haberler, start=1):
+            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}\n Kaynak:{kaynak_url}",
                              disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")

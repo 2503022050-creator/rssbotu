@@ -29,12 +29,16 @@ def get_links():
     return url_list
 
 
-def add_link(url):
+def add_link(url, added_by):
     """Kullanıcının gönderdiği yeni bir RSS linkini veritabanına kaydeder."""
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
-    cursor.execute("INSERT INTO kaynaklar (url) VALUES (%s);", (url,))
+    cursor.execute("""
+        INSERT INTO kaynaklar (url, added_by)
+        VALUES (%s, %s);
+    """, (url, added_by))
+
     baglanti.commit()
     cursor.close()
     baglanti.close()
@@ -63,16 +67,18 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
         title TEXT NOT NULL,
         link TEXT NOT NULL UNIQUE,
         pub_date TEXT,
-        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP   
+        kaynak_url TEXT,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+           
     );
     """)
 
     for haber in haberler:
         cursor.execute("""
-            INSERT INTO haberler (title, link, pub_date)
-            VALUES (%s, %s, %s)
+            INSERT INTO haberler (title, link, pub_date,kaynak_url)
+            VALUES (%s, %s, %s,%s)
             ON CONFLICT (link) DO NOTHING;
-        """, (haber["title"], haber["link"], haber.get("pub_date")))
+        """, (haber["title"], haber["link"], haber.get("pub_date"), haber.get("kaynak_url")))
 
         # Sadece bildirim=True ise ve yeni haber eklendiyse anlık mesaj atar
         if cursor.rowcount > 0 and bildirim:
@@ -85,7 +91,7 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
 def son_haberleri_getir(limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
-    cursor.execute("SELECT title, link FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
+    cursor.execute("SELECT title, link, kaynak_url FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()
