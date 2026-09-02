@@ -3,6 +3,8 @@ import telebot #Telegram Bot API'si ile kodumuz arasında iletişim köprüsü
 from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'ın okuyabileceği formata getirme
 import scraper
 import db_operation
+import re  #sadece http:// veya https:// ile başlayan haber linki alır
+from ai_helper import ozetle
 from telebot.types import BotCommand, ForceReply
 
 load_dotenv()#env dosyasını okuyarak içindeki gizli şifreleri aktif hale getirir
@@ -15,7 +17,8 @@ bot.set_my_commands([
     BotCommand("kaynaklar", "Kayıtlı kaynakları listele"),
     BotCommand("ekle", "Yeni kaynak ekle"),
     BotCommand("sil", "Kayıtlı kaynak sil"),
-    BotCommand("start", "Başlangıç mesajı")
+    BotCommand("start", "Başlangıç mesajı"),
+    BotCommand("ozet", "Yanıtlanan haberi özetle"),
 ])
 
 def calistir(isteyen_kisi_id=None, bildirim=True):
@@ -42,6 +45,7 @@ def karsilama(message):
         "Kullanabileceğiniz komutlar:\n\n"
         "`/haber` - Son güncel haberleri getirir\n"
         "`/kaynaklar` - Kayıtlı RSS sitelerini gösterir\n"
+        "`/ozet` - Yanıtlanan haberi özetler\n"
         "`/ekle https://site.com/rss` - Yeni kaynak ekler\n"
         "`/sil https://site.com/rss` - Kaynak siler"
     )
@@ -135,14 +139,54 @@ def haberleri_getir(message):
 
     if son_haberler:
         bot.send_message(message.chat.id, f"{len(son_haberler)} haber bulundu.")
-        for index, (baslik, link, kaynak_url) in enumerate(son_haberler, start=1):
-            bot.send_message(message.chat.id, f"[{index}/{len(son_haberler)}] {baslik}\n{link}\n Kaynak:{kaynak_url}",
-                             disable_web_page_preview=True)
+
+        for index, (baslik, link, kaynak_url, ozet) in enumerate(son_haberler, start=1):
+            mesaj_metni = f"[{index}/{len(son_haberler)}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
+            bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
     else:
         bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")
 
     bot.send_message(message.chat.id, "Tarama tamamlandı")
 
+@bot.message_handler(commands=['ozet'])
+def haber_ozetle(message):
+    #mesaja reply yapılmış mı kontrolü
+    if message.reply_to_message is None:
+        bot.reply_to(message, "Lütfen özetlemek istediğin haberi yanıtlayarak /ozet yaz.")
+        return
+
+    #yanıtlanan mesajın içinde metin var mı kontrolü
+    if not message.reply_to_message.text:
+        bot.reply_to(message, "Yanıtladığın mesaj bir yazı içermiyor.")
+        return
+
+    yanitlanan_metin = message.reply_to_message.text
+    link_eslesme = re.search(r'https?://[^\s]+', yanitlanan_metin) #linkin nerede olduğu hakkında bilgi paketi
+
+    #mesajın içinden link bulunabildi mi
+    if link_eslesme is None:
+        bot.reply_to(message, "Yanıtladığın mesajda geçerli bir haber linki bulunamadı.")
+        return
+
+    link = link_eslesme.group(0) #o bilgi paketinden tek linki çeker
+    bekleme_mesaji = bot.reply_to(message, " Haber içeriği özetleniyor...")
+
+    #haberin web adresine gidip tüm paragraflarını çeker
+    detay_metni = scraper.haberin_icine_gir(link)
+
+    #eğer siteden metin çekilemezse veya çok kısa kalırsa yanıtlanan mesajın kendisini kullanır
+    if not detay_metni or len(detay_metni) < 50:
+        detay_metni = yanitlanan_metin
+
+    gonderilecek_metin = f"Aşağıdaki haberi Türkçe olarak kısa ve öz şekilde özetle:\n\n{detay_metni}"
+    ozet_sonucu = ozetle(gonderilecek_metin)
+
+    bot.edit_message_text( #mevcut mesajın yazısını güncelleyen fonksiyon
+        chat_id=bekleme_mesaji.chat.id,
+        message_id=bekleme_mesaji.message_id, #hangi mesajın değişceğini söyler
+        text=f"<b>Haber Özeti:</b>\n\n{ozet_sonucu}", #eski yazının yerine ne yazılıcak
+        parse_mode="HTML"
+    )
 if __name__ == "__main__":
     print(" Telegram'dan mesaj bekleniyor..")
     bot.infinity_polling()#sunucularını kesintisiz ve sonsuz bir döngüde dinlemesini sağlıyor
