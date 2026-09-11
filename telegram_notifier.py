@@ -5,13 +5,13 @@ from dotenv import load_dotenv
 load_dotenv()#şifreleri gizli dosyadan güvenli okumak için
 
 
-def telegrama_haber_gonder(baslik, link, gonderilecek_kisi=None):
+def telegrama_haber_gonder(baslik, link, ozet, gonderilecek_kisi=None):
     token = os.getenv("TELEGRAM_BOT_TOKEN")
 
 #Gelen bir ID yoksa sistem aksamadan çalışsın diye haberleri yedek adres olarak .env dosyasına yollar
     chat_id = gonderilecek_kisi if gonderilecek_kisi else os.getenv("TELEGRAM_CHAT_ID")
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    mesaj = f"{baslik}\n{link}"
+    url = f"https://api.telegram.org/bot{token}/sendMessage" #telegram sunucularının mesaj kabul ettiği web yeri
+    mesaj = f"<b>{baslik}</b>\n\n{link}" #<b> etiketi koyu renk görünmesini sağlar
 
-    requests.post(url, data={"chat_id": chat_id, "text": mesaj})
+    requests.post(url, data={"chat_id": chat_id, "text": mesaj, "parse_mode": "HTML", "disable_web_page_preview": True})

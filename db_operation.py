@@ -68,6 +68,7 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
         link TEXT NOT NULL UNIQUE,
         pub_date TEXT,
         kaynak_url TEXT,
+        ozet TEXT,
         added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
            
     );
@@ -75,14 +76,14 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
 
     for haber in haberler:
         cursor.execute("""
-            INSERT INTO haberler (title, link, pub_date,kaynak_url)
-            VALUES (%s, %s, %s,%s)
+            INSERT INTO haberler (title, link, pub_date,kaynak_url,ozet)
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (link) DO NOTHING;
-        """, (haber["title"], haber["link"], haber.get("pub_date"), haber.get("kaynak_url")))
+        """, (haber["title"], haber["link"], haber.get("pub_date"), haber.get("kaynak_url"), haber.get("ozet")))
 
         # Sadece bildirim=True ise ve yeni haber eklendiyse anlık mesaj atar
         if cursor.rowcount > 0 and bildirim:
-            telegrama_haber_gonder(haber["title"], haber["link"], gonderilecek_kisi)
+            telegrama_haber_gonder(haber["title"], haber["link"], haber.get("ozet"),gonderilecek_kisi)
 
     baglanti.commit()
     cursor.close()
@@ -91,7 +92,7 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
 def son_haberleri_getir(limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
-    cursor.execute("SELECT title, link, kaynak_url FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
+    cursor.execute("SELECT title, link, kaynak_url, ozet FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()
