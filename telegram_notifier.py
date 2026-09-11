@@ -1,3 +1,4 @@
+import html
 import os #gizli şifreleri okumak için
 import requests
 from dotenv import load_dotenv
@@ -12,6 +13,7 @@ def telegrama_haber_gonder(baslik, link, ozet, gonderilecek_kisi=None):
     chat_id = gonderilecek_kisi if gonderilecek_kisi else os.getenv("TELEGRAM_CHAT_ID")
 
     url = f"https://api.telegram.org/bot{token}/sendMessage" #telegram sunucularının mesaj kabul ettiği web yeri
-    mesaj = f"<b>{baslik}</b>\n\n{link}" #<b> etiketi koyu renk görünmesini sağlar
+    guvenli_baslik = html.escape(str(baslik))
+    mesaj = f"<b>{guvenli_baslik}</b>\n\n{link}" #<b> etiketi koyu renk görünmesini sağlar
 
     requests.post(url, data={"chat_id": chat_id, "text": mesaj, "parse_mode": "HTML", "disable_web_page_preview": True})

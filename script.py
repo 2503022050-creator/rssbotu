@@ -1,9 +1,12 @@
+import html
 import os
+import re  #sadece http:// veya https:// ile başlayan haber linki alır
+import time
 import telebot #Telegram Bot API'si ile kodumuz arasında iletişim köprüsü
+from telebot.apihelper import ApiTelegramException
 from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'ın okuyabileceği formata getirme
 import scraper
 import db_operation
-import re  #sadece http:// veya https:// ile başlayan haber linki alır
 from ai_helper import ozetle
 from telebot.types import BotCommand, ForceReply
 
@@ -26,17 +29,28 @@ def calistir(isteyen_kisi_id=None, bildirim=True):
 
     if not kaynaklar:
         print("Veritabanında kayıtlı RSS adresi bulunamadı.")
-        return
+        return []
 
     print(f"Veritabanından {len(kaynaklar)} adet RSS kaynağı alındı. Tarama başlıyor")
     haberler = scraper.rss_tara(kaynaklar)
 
     if haberler:
+        # Tekrarlanan linkleri tekilleştir
+        gorulen_linkler = set()
+        benzersiz_haberler = []
+        for h in haberler:
+            if h["link"] not in gorulen_linkler:
+                gorulen_linkler.add(h["link"])
+                benzersiz_haberler.append(h)
+        haberler = benzersiz_haberler
+
         # bildirim durumunu db_operation'a aktarıyoruz
-        db_operation.haberleri_kaydet(haberler, isteyen_kisi_id, bildirim=bildirim)
-        print(f"\n İşlem tamamlandı Toplam {len(haberler)} haber veritabanına işlendi.")
+        yeni_sayisi = db_operation.haberleri_kaydet(haberler, isteyen_kisi_id, bildirim=bildirim)
+        print(f"\n İşlem tamamlandı: Toplam {len(haberler)} güncel haber tarandı ({yeni_sayisi} yeni haber veritabanına işlendi).")
     else:
         print("\n Taranan kaynaklarda yeni bir haber bulunamadı.")
+
+    return haberler or []
 
 #start komutu,Karşılama Mesajı
 @bot.message_handler(commands=['start'])
@@ -133,18 +147,50 @@ def kaynak_sil_tamamla(message):
 def haberleri_getir(message):
     bot.send_message(message.chat.id, "Son haberler taranıyor..")
 
-    calistir(bildirim=False)#aynı haber için iki defa bildirim gitmesini engellemek için
+    # Güncel haberleri tara
+    haberler = calistir(bildirim=False) # aynı haber için iki defa bildirim gitmesini engellemek için
 
-    son_haberler = db_operation.son_haberleri_getir()
+    # Eğer anlık taramada haber bulunamazsa veritabanındaki son haberleri getir
+    if not haberler:
+        son_haberler_db = db_operation.son_haberleri_getir(limit=20)
+        if son_haberler_db:
+            haberler = [{"title": h[0], "link": h[1], "kaynak_url": h[2]} for h in son_haberler_db]
 
-    if son_haberler:
-        bot.send_message(message.chat.id, f"{len(son_haberler)} haber bulundu.")
+    if haberler:
+        toplam_haber = len(haberler)
+        bot.send_message(message.chat.id, f"{toplam_haber} haber bulundu.")
 
-        for index, (baslik, link, kaynak_url, ozet) in enumerate(son_haberler, start=1):
-            mesaj_metni = f"[{index}/{len(son_haberler)}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
-            bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
+        for index, haber in enumerate(haberler, start=1):
+            baslik = html.escape(str(haber.get("title", "Başlık Yok")))
+            link = haber.get("link", "")
+            kaynak_url = haber.get("kaynak_url", "")
+            mesaj_metni = f"[{index}/{toplam_haber}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
+
+            try:
+                bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
+                time.sleep(0.4)  # Telegram hız sınırına takılmamak için kısa bekleme
+            except ApiTelegramException as e:
+                if e.error_code == 429:
+                    # Telegram hız sınırına takıldıysa belirtilen süre kadar bekle
+                    retry_after = int(e.result_json.get('parameters', {}).get('retry_after', 3))
+                    time.sleep(retry_after + 1)
+                    try:
+                        bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
+                    except Exception as err:
+                        print(f"Haber gönderilemedi: {err}")
+                elif e.error_code == 400:
+                    # HTML hatası olursa düz metin gönder
+                    duz_metin = f"[{index}/{toplam_haber}] {haber.get('title', 'Başlık Yok')}\n\n{link}\n\nKaynak: {kaynak_url}"
+                    try:
+                        bot.send_message(message.chat.id, duz_metin, disable_web_page_preview=True)
+                    except Exception as err:
+                        print(f"Haber gönderilemedi: {err}")
+                else:
+                    print(f"Telegram API hatası ({e.error_code}): {e}")
+            except Exception as e:
+                print(f"Haber gönderilirken beklenmeyen hata: {e}")
     else:
-        bot.send_message(message.chat.id, "Henüz veritabanında haber bulunmuyor.")
+        bot.send_message(message.chat.id, "Henüz haber bulunmuyor.")
 
     bot.send_message(message.chat.id, "Tarama tamamlandı")
 

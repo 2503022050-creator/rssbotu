@@ -74,6 +74,7 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
     );
     """)
 
+    eklenen_sayisi = 0
     for haber in haberler:
         cursor.execute("""
             INSERT INTO haberler (title, link, pub_date,kaynak_url,ozet)
@@ -82,12 +83,15 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
         """, (haber["title"], haber["link"], haber.get("pub_date"), haber.get("kaynak_url"), haber.get("ozet")))
 
         # Sadece bildirim=True ise ve yeni haber eklendiyse anlık mesaj atar
-        if cursor.rowcount > 0 and bildirim:
-            telegrama_haber_gonder(haber["title"], haber["link"], haber.get("ozet"),gonderilecek_kisi)
+        if cursor.rowcount > 0:
+            eklenen_sayisi += 1
+            if bildirim:
+                telegrama_haber_gonder(haber["title"], haber["link"], haber.get("ozet"), gonderilecek_kisi)
 
     baglanti.commit()
     cursor.close()
     baglanti.close()
+    return eklenen_sayisi
 
 def son_haberleri_getir(limit=100):
     baglanti = baglanti_get()
