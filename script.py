@@ -8,6 +8,7 @@ from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'�
 import scraper
 import db_operation
 from ai_helper import ozetle
+from telebot import types
 from telebot.types import BotCommand, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()#env dosyasını okuyarak içindeki gizli şifreleri aktif hale getirir
@@ -193,7 +194,7 @@ def haberleri_getir(message):
             time.sleep(0.4)  # Telegram bizi çok hızlı mesaj atmaktan engellemesin diye kısa bekleme
 
         except ApiTelegramException as e:
-            # Eğer Telegram bizi hız sınırından durdurursa, istediği süre kadar bekleyip tekrar deniyoruz
+
             if e.error_code == 429:
                 bekleme_suresi = int(e.result_json.get('parameters', {}).get('retry_after', 3))
                 time.sleep(bekleme_suresi + 1)
@@ -209,7 +210,6 @@ def haberleri_getir(message):
         except Exception as e:
             print(f"Haber gönderilemedi: {e}")
 
-    # Bütün haberler bitince kapanış mesajı
     bot.send_message(message.chat.id, "Tarama tamamlandı")
 @bot.message_handler(commands=['ozet'])
 def haber_ozetle(message):
@@ -268,32 +268,42 @@ def buton(call):
         bot.answer_callback_query(call.id, "Zaten listenizde var.")
 
 
-# 2. /favoriler KOMUTU YAZILDIĞINDA ÇALIŞACAK KISIM
 @bot.message_handler(commands=['favoriler'])
 def favorileri_goster(message):
     kullanici_numarasi = message.from_user.id
-
-    # Veritabanından sadece bu kullanıcının kaydettiği haberleri çekiyoruz
     kaydedilenler = db_operation.favorileri_getir(kullanici_numarasi)
 
-    # Eğer listede hiç haber yoksa haber ver ve işlemi bitir
     if not kaydedilenler:
-        bot.send_message(message.chat.id, "Listeniz şuan boş.")
+        bot.send_message(message.chat.id, "Listeniz şu an boş.")
         return
 
-    # Göndereceğimiz mesajın başlığını hazırlıyoruz
-    mesaj = "<b>Okuma Listeniz:</b>\n\n"
+    bot.send_message(message.chat.id, f"<b>⭐ Okuma Listeniz ({len(kaydedilenler)} Haber):</b>", parse_mode="HTML")
 
-    # Veritabanından gelen haberleri tek tek dönüp mesaja alt alta ekliyoruz
-    for sira, haber in enumerate(kaydedilenler, start=1):
-        baslik = html.escape(str(haber[0]))  # Başlıktaki <, > gibi işaretlerin Telegramı bozmasını engeller
-        link = haber[1]
+    for haber in kaydedilenler:
+        haber_id = haber[0]
+        baslik = html.escape(str(haber[1]))
+        link = haber[2]
 
-        # Her haberi "1. Başlık" formatında ve tıklanabilir link olarak ekliyoruz
-        mesaj += f"{sira}. <a href='{link}'>{baslik}</a>\n\n"
+        # Her haberin altına özel Listeden Çıkar butonu
+        markup = types.InlineKeyboardMarkup()
+        sil_butonu = types.InlineKeyboardButton("🗑️", callback_data=f"fav_sil_{haber_id}")
+        markup.add(sil_butonu)
 
-    # Hazırladığımız listeyi kullanıcıya gönderiyoruz
-    bot.send_message(message.chat.id, mesaj, parse_mode="HTML", disable_web_page_preview=True)
+        mesaj = f"<a href='{link}'><b>{baslik}</b></a>"
+        bot.send_message(message.chat.id, mesaj, parse_mode="HTML", reply_markup=markup, disable_web_page_preview=True)
+
+        @bot.callback_query_handler(func=lambda call: call.data.startswith('fav_sil_'))
+        def favori_sil_butonu(call):
+
+            haber_id = int(call.data.split('_')[2])
+            kullanici_id = call.from_user.id
+
+            db_operation.favori_sil(kullanici_id, haber_id)
+
+            bot.answer_callback_query(call.id, text="❌ Haber favorilerden çıkarıldı.")
+            bot.edit_message_text("<i>Bu haber listenizden çıkarıldı.</i>", call.message.chat.id,
+                                  call.message.message_id, parse_mode="HTML")
+
 if __name__ == "__main__":
     print(" Telegram'dan mesaj bekleniyor..")
     bot.infinity_polling()#sunucularını kesintisiz ve sonsuz bir döngüde dinlemesini sağlıyor

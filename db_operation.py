@@ -145,7 +145,7 @@ def favorileri_getir(kullanici_id):
     cursor = baglanti.cursor()
 
     cursor.execute("""
-        SELECT h.title, h.link 
+        SELECT h.id, h.title, h.link
         FROM favoriler f
         JOIN haberler h ON f.haber_id = h.id
         WHERE f.kullanici_id = %s
@@ -156,3 +156,17 @@ def favorileri_getir(kullanici_id):
     cursor.close()
     baglanti.close()
     return favoriler
+
+
+def favori_sil(kullanici_id, haber_id):
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+
+    cursor.execute("""
+        DELETE FROM favoriler 
+        WHERE kullanici_id = %s AND haber_id = %s;
+    """, (kullanici_id, haber_id))
+
+    baglanti.commit()
+    cursor.close()
+    baglanti.close()
