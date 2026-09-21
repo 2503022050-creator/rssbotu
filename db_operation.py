@@ -30,7 +30,6 @@ def get_links():
 
 
 def add_link(url, added_by):
-    """Kullanıcının gönderdiği yeni bir RSS linkini veritabanına kaydeder."""
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
@@ -46,7 +45,6 @@ def add_link(url, added_by):
 
 
 def delete_link(url):
-    """Belirtilen RSS linkini veritabanından siler."""
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
@@ -93,11 +91,68 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
     baglanti.close()
     return eklenen_sayisi
 
-def son_haberleri_getir(limit=100):
+
+def son_haberleri_getir(limit=80):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
-    cursor.execute("SELECT title, link, kaynak_url, ozet FROM haberler ORDER BY id DESC LIMIT %s;", (limit,))
+
+    # AND added_at >= NOW() - INTERVAL '24 hours' kuralını ekledik.
+    # Bu kural sadece son 24 saatte veritabanına girenleri filtreler.
+    cursor.execute("""
+        SELECT id, title, link, kaynak_url, ozet 
+        FROM haberler 
+        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
+          AND added_at >= NOW() - INTERVAL '24 hours'
+        ORDER BY id DESC 
+        LIMIT %s;
+    """, (limit,))
+
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()
     return haberler
+
+
+def favori_ekle(kullanici_id, haber_id):
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS favoriler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        eklenme_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
+
+    cursor.execute("""
+        INSERT INTO favoriler (kullanici_id, haber_id)
+        VALUES (%s, %s)
+        ON CONFLICT (kullanici_id, haber_id) DO NOTHING;
+    """, (kullanici_id, haber_id))
+
+    x = cursor.rowcount > 0
+    baglanti.commit()
+    cursor.close()
+    baglanti.close()
+    return x
+
+
+def favorileri_getir(kullanici_id):
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+
+    cursor.execute("""
+        SELECT h.title, h.link 
+        FROM favoriler f
+        JOIN haberler h ON f.haber_id = h.id
+        WHERE f.kullanici_id = %s
+        ORDER BY f.eklenme_tarihi DESC LIMIT 30;
+    """, (kullanici_id,))
+
+    favoriler = cursor.fetchall()
+    cursor.close()
+    baglanti.close()
+    return favoriler

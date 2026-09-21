@@ -8,7 +8,7 @@ from dotenv import load_dotenv #.env dosyasındaki gizli değişkenleri python'�
 import scraper
 import db_operation
 from ai_helper import ozetle
-from telebot.types import BotCommand, ForceReply
+from telebot.types import BotCommand, ForceReply, InlineKeyboardMarkup, InlineKeyboardButton
 
 load_dotenv()#env dosyasını okuyarak içindeki gizli şifreleri aktif hale getirir
 
@@ -17,11 +17,12 @@ bot = telebot.TeleBot(token)
 #bot menü kısmı
 bot.set_my_commands([
     BotCommand("haber", "Son haberleri getir"),
+    BotCommand("ozet", "Yanıtlanan haberi özetle"),
     BotCommand("kaynaklar", "Kayıtlı kaynakları listele"),
+    BotCommand("favoriler", "Daha sonra oku listeniz"),
     BotCommand("ekle", "Yeni kaynak ekle"),
     BotCommand("sil", "Kayıtlı kaynak sil"),
     BotCommand("start", "Başlangıç mesajı"),
-    BotCommand("ozet", "Yanıtlanan haberi özetle"),
 ])
 
 def calistir(isteyen_kisi_id=None, bildirim=True):
@@ -145,55 +146,71 @@ def kaynak_sil_tamamla(message):
 #haber komutu
 @bot.message_handler(commands=['haber'])
 def haberleri_getir(message):
+    # Kullanıcıya bekleme mesajı gönderiyoruz
     bot.send_message(message.chat.id, "Son haberler taranıyor..")
 
-    # Güncel haberleri tara
-    haberler = calistir(bildirim=False) # aynı haber için iki defa bildirim gitmesini engellemek için
+    # 1. Kaynakları tara ve yeni haberleri veritabanına kaydet (bildirim atmadan)
+    calistir(bildirim=False)
 
-    # Eğer anlık taramada haber bulunamazsa veritabanındaki son haberleri getir
-    if not haberler:
-        son_haberler_db = db_operation.son_haberleri_getir(limit=20)
-        if son_haberler_db:
-            haberler = [{"title": h[0], "link": h[1], "kaynak_url": h[2]} for h in son_haberler_db]
+    # 2. Butonlara ID ekleyebilmek için son 20 haberi her halükarda veritabanından çekiyoruz
+    son_haberler = db_operation.son_haberleri_getir(limit=100)
 
-    if haberler:
-        toplam_haber = len(haberler)
-        bot.send_message(message.chat.id, f"{toplam_haber} haber bulundu.")
-
-        for index, haber in enumerate(haberler, start=1):
-            baslik = html.escape(str(haber.get("title", "Başlık Yok")))
-            link = haber.get("link", "")
-            kaynak_url = haber.get("kaynak_url", "")
-            mesaj_metni = f"[{index}/{toplam_haber}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
-
-            try:
-                bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
-                time.sleep(0.4)  # Telegram hız sınırına takılmamak için kısa bekleme
-            except ApiTelegramException as e:
-                if e.error_code == 429:
-                    # Telegram hız sınırına takıldıysa belirtilen süre kadar bekle
-                    retry_after = int(e.result_json.get('parameters', {}).get('retry_after', 3))
-                    time.sleep(retry_after + 1)
-                    try:
-                        bot.send_message(message.chat.id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True)
-                    except Exception as err:
-                        print(f"Haber gönderilemedi: {err}")
-                elif e.error_code == 400:
-                    # HTML hatası olursa düz metin gönder
-                    duz_metin = f"[{index}/{toplam_haber}] {haber.get('title', 'Başlık Yok')}\n\n{link}\n\nKaynak: {kaynak_url}"
-                    try:
-                        bot.send_message(message.chat.id, duz_metin, disable_web_page_preview=True)
-                    except Exception as err:
-                        print(f"Haber gönderilemedi: {err}")
-                else:
-                    print(f"Telegram API hatası ({e.error_code}): {e}")
-            except Exception as e:
-                print(f"Haber gönderilirken beklenmeyen hata: {e}")
-    else:
+    # Eğer veritabanı tamamen boşsa uyarı ver ve işlemi bitir
+    if not son_haberler:
         bot.send_message(message.chat.id, "Henüz haber bulunmuyor.")
+        return
 
+    toplam_haber = len(son_haberler)
+    bot.send_message(message.chat.id, f"{toplam_haber} haber bulundu.")
+
+    # 3. Veritabanından gelen haberleri tek tek dönüp ekrana basıyoruz
+    for index, haber in enumerate(son_haberler, start=1):
+
+        # db_operation dosyasında "SELECT id, title, link, kaynak_url, ozet" dediğimiz için
+        # veriler tam olarak bu sırayla geliyor. Bunları değişkenlere atıyoruz:
+        haber_id, title, link, kaynak_url, ozet = haber
+
+        # Başlıktaki HTML'i bozabilecek (<, >) özel karakterleri temizliyoruz
+        baslik = html.escape(str(title))
+
+        # Gönderilecek metni hazırlıyoruz
+        mesaj_metni = f"[{index}/{toplam_haber}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
+
+        # 4. Haberin altına eklenecek "Daha Sonra Oku" butonunu oluşturuyoruz
+        markup = InlineKeyboardMarkup()
+        # Butonun içine arka planda haberin kimlik numarasını (haber_id) gizliyoruz
+        markup.add(InlineKeyboardButton("⭐", callback_data=f"kaydet_{haber_id}"))
+
+        # 5. Mesajı ve butonu Telegram'a gönderiyoruz
+        try:
+            bot.send_message(
+                message.chat.id,
+                mesaj_metni,
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+                reply_markup=markup
+            )
+            time.sleep(0.4)  # Telegram bizi çok hızlı mesaj atmaktan engellemesin diye kısa bekleme
+
+        except ApiTelegramException as e:
+            # Eğer Telegram bizi hız sınırından durdurursa, istediği süre kadar bekleyip tekrar deniyoruz
+            if e.error_code == 429:
+                bekleme_suresi = int(e.result_json.get('parameters', {}).get('retry_after', 3))
+                time.sleep(bekleme_suresi + 1)
+                bot.send_message(
+                    message.chat.id,
+                    mesaj_metni,
+                    parse_mode="HTML",
+                    disable_web_page_preview=True,
+                    reply_markup=markup
+                )
+            else:
+                print(f"Telegram API hatası: {e}")
+        except Exception as e:
+            print(f"Haber gönderilemedi: {e}")
+
+    # Bütün haberler bitince kapanış mesajı
     bot.send_message(message.chat.id, "Tarama tamamlandı")
-
 @bot.message_handler(commands=['ozet'])
 def haber_ozetle(message):
     #mesaja reply yapılmış mı kontrolü
@@ -233,6 +250,50 @@ def haber_ozetle(message):
         text=f"<b>Haber Özeti:</b>\n\n{ozet_sonucu}", #eski yazının yerine ne yazılıcak
         parse_mode="HTML"
     )
+
+
+# 1. BUTONA TIKLANDIĞINDA ÇALIŞACAK KISIM
+@bot.callback_query_handler(func=lambda call: call.data.startswith('kaydet_'))
+def buton(call):
+    haber_numarasi = call.data.split('_')[1]
+    kullanici_numarasi = call.from_user.id
+
+
+    basarili_mi = db_operation.favori_ekle(kullanici_numarasi, haber_numarasi)
+
+    # Kullanıcının ekranında çıkacak küçük bildirim mesajı
+    if basarili_mi:
+        bot.answer_callback_query(call.id, "⭐ Listenize eklendi")
+    else:
+        bot.answer_callback_query(call.id, "Zaten listenizde var.")
+
+
+# 2. /favoriler KOMUTU YAZILDIĞINDA ÇALIŞACAK KISIM
+@bot.message_handler(commands=['favoriler'])
+def favorileri_goster(message):
+    kullanici_numarasi = message.from_user.id
+
+    # Veritabanından sadece bu kullanıcının kaydettiği haberleri çekiyoruz
+    kaydedilenler = db_operation.favorileri_getir(kullanici_numarasi)
+
+    # Eğer listede hiç haber yoksa haber ver ve işlemi bitir
+    if not kaydedilenler:
+        bot.send_message(message.chat.id, "Listeniz şuan boş.")
+        return
+
+    # Göndereceğimiz mesajın başlığını hazırlıyoruz
+    mesaj = "<b>Okuma Listeniz:</b>\n\n"
+
+    # Veritabanından gelen haberleri tek tek dönüp mesaja alt alta ekliyoruz
+    for sira, haber in enumerate(kaydedilenler, start=1):
+        baslik = html.escape(str(haber[0]))  # Başlıktaki <, > gibi işaretlerin Telegramı bozmasını engeller
+        link = haber[1]
+
+        # Her haberi "1. Başlık" formatında ve tıklanabilir link olarak ekliyoruz
+        mesaj += f"{sira}. <a href='{link}'>{baslik}</a>\n\n"
+
+    # Hazırladığımız listeyi kullanıcıya gönderiyoruz
+    bot.send_message(message.chat.id, mesaj, parse_mode="HTML", disable_web_page_preview=True)
 if __name__ == "__main__":
     print(" Telegram'dan mesaj bekleniyor..")
     bot.infinity_polling()#sunucularını kesintisiz ve sonsuz bir döngüde dinlemesini sağlıyor
