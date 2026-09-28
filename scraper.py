@@ -49,15 +49,15 @@ def rss_tara(url_list):
                 title = haber.title.text if haber.title else "Başlık yok"
                 link = haber.link.text if haber.link else "Link yok"
 
-                # 1. Filtre: 24 Saatlik Zaman Kontrolü
+                # 1. Filtre: 1 Haftalık (7 Gün) Zaman Kontrolü
                 pub_date = haber.find("pubDate") or haber.find("published") or haber.find("dc:date")
                 if pub_date:
                     parsed_date = parsedate_tz(pub_date.text)
                     if parsed_date:
                         item_ts = mktime_tz(parsed_date)
                         now_ts = time.time()
-                        if (now_ts - item_ts) > 86400:
-                            continue  # 24 saatten eski haberleri atla
+                        if (now_ts - item_ts) > 604800:
+                            continue  # 1 haftadan (7 gün) eski haberleri atla
 
                 # Temiz veriyi listeye ekleme
                 haberler.append({

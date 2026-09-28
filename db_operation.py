@@ -170,3 +170,33 @@ def favori_sil(kullanici_id, haber_id):
     baglanti.commit()
     cursor.close()
     baglanti.close()
+
+def son_3_gun():
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+    cursor.execute("""
+        SELECT id, title, link, kaynak_url, ozet 
+        FROM haberler 
+        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
+          AND added_at >= NOW() - INTERVAL '3 DAYS'
+        ORDER BY id DESC LIMIT 100;
+    """)
+    haberler = cursor.fetchall()
+    cursor.close()
+    baglanti.close()
+    return haberler
+
+def son_1_hafta():
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+    cursor.execute("""
+        SELECT id, title, link, kaynak_url, ozet 
+        FROM haberler 
+        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
+          AND added_at >= NOW() - INTERVAL '7 DAYS'
+        ORDER BY id DESC LIMIT 200;
+    """)
+    haberler = cursor.fetchall()
+    cursor.close()
+    baglanti.close()
+    return haberler
