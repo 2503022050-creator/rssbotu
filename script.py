@@ -82,24 +82,25 @@ def karsilama(message):
     func=lambda message: message.text in ["Son 24 Saat", "Son 3 Gün", "Son 1 Hafta", "⭐ Favoriler", "Kaynaklar"])
 def sabit_menu_islem(message):
     chat_id = message.chat.id
+    kullanici_id = message.from_user.id  # Kullanıcıyı tanımak için
     secim = message.text
 
     if secim == "Son 24 Saat":
-        haberler = db_operation.son_haberleri_getir(limit=60)
+        haberler = db_operation.son_haberleri_getir(kullanici_id,limit=100)
         bot.send_message(chat_id, "Son 24 saat içindeki güncel haberler getiriliyor...",
                          reply_markup=sabit_menu_getir())
-        haberleri_bas(chat_id, haberler)
+        haberleri_bas(chat_id, haberler, kullanici_id)
 
 
     elif secim == "Son 3 Gün":
-        haberler = db_operation.son_3_gun()
+        haberler = db_operation.son_3_gun(kullanici_id,limit=200)
         bot.send_message(chat_id, "Son 3 gün içindeki haberler getiriliyor...", reply_markup=sabit_menu_getir())
-        haberleri_bas(chat_id, haberler)
+        haberleri_bas(chat_id, haberler, kullanici_id)
 
     elif secim == "Son 1 Hafta":
-        haberler = db_operation.son_1_hafta()
+        haberler = db_operation.son_1_hafta(kullanici_id , limit=300)
         bot.send_message(chat_id, "Son 1 haftanın haberleri getiriliyor...", reply_markup=sabit_menu_getir())
-        haberleri_bas(chat_id, haberler)
+        haberleri_bas(chat_id, haberler, kullanici_id)
 
     elif secim == "⭐ Favoriler":
         kaydedilenler = db_operation.favorileri_getir(message.from_user.id)
@@ -125,7 +126,7 @@ def sabit_menu_islem(message):
         kaynaklar_getir(message)
 
 
-def haberleri_bas(chat_id, haber_listesi):
+def haberleri_bas(chat_id, haber_listesi,kullanici_id):
     if not haber_listesi:
         bot.send_message(chat_id, "Bu aralıkta haber bulunamadı.", reply_markup=sabit_menu_getir())
         return
@@ -146,6 +147,8 @@ def haberleri_bas(chat_id, haber_listesi):
         try:
             bot.send_message(chat_id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True,
                              reply_markup=markup)
+            #Haberi ekrana bastıktan hemen sonra okundu olarak veritabanına yazıyoruz
+            db_operation.haber_okundu_isaretle(kullanici_id, haber_id)
             time.sleep(0.4)
         except Exception as e:
             print(f"Hata: {e}")

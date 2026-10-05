@@ -92,20 +92,19 @@ def haberleri_kaydet(haberler, gonderilecek_kisi=None, bildirim=True):
     return eklenen_sayisi
 
 
-def son_haberleri_getir(limit=80):
+def son_haberleri_getir(kullanici_id, limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
-    # AND added_at >= NOW() - INTERVAL '24 hours' kuralını ekledik.
-    # Bu kural sadece son 24 saatte veritabanına girenleri filtreler.
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
         WHERE kaynak_url IN (SELECT url FROM kaynaklar)
           AND added_at >= NOW() - INTERVAL '24 hours'
+          AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
         ORDER BY id DESC 
         LIMIT %s;
-    """, (limit,))
+    """, (kullanici_id, limit))
 
     haberler = cursor.fetchall()
     cursor.close()
@@ -171,32 +170,67 @@ def favori_sil(kullanici_id, haber_id):
     cursor.close()
     baglanti.close()
 
-def son_3_gun():
+
+def son_3_gun(kullanici_id, limit=200):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
+
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
         WHERE kaynak_url IN (SELECT url FROM kaynaklar)
           AND added_at >= NOW() - INTERVAL '3 DAYS'
-        ORDER BY id DESC LIMIT 100;
-    """)
+          AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
+        ORDER BY id DESC LIMIT %s;
+    """, (kullanici_id, limit))
+
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()
     return haberler
 
-def son_1_hafta():
+
+def son_1_hafta(kullanici_id, limit=300):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
+
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
         WHERE kaynak_url IN (SELECT url FROM kaynaklar)
           AND added_at >= NOW() - INTERVAL '7 DAYS'
-        ORDER BY id DESC LIMIT 200;
-    """)
+          AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
+        ORDER BY id DESC LIMIT %s;
+    """, (kullanici_id, limit))
+
     haberler = cursor.fetchall()
     cursor.close()
     baglanti.close()
     return haberler
+
+
+def haber_okundu_isaretle(kullanici_id, haber_id):
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS okunan_haberler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        okunma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
+
+    cursor.execute("""
+        INSERT INTO okunan_haberler (kullanici_id, haber_id)
+        VALUES (%s, %s)
+        ON CONFLICT (kullanici_id, haber_id) DO NOTHING;
+    """, (kullanici_id, haber_id))
+
+    baglanti.commit()
+    cursor.close()
+    baglanti.close()
+
+
