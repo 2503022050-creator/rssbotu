@@ -96,6 +96,18 @@ def son_haberleri_getir(kullanici_id, limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
+    # 1. Sorgu atmadan önce tablonun var olduğundan emin oluyoruz
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS okunan_haberler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        okunma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
+
+    # 2. Tablo garanti edildikten sonra sorguyu güvenle çalıştırıyoruz
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
@@ -110,7 +122,6 @@ def son_haberleri_getir(kullanici_id, limit=100):
     cursor.close()
     baglanti.close()
     return haberler
-
 
 def favori_ekle(kullanici_id, haber_id):
     baglanti = baglanti_get()
@@ -176,6 +187,16 @@ def son_3_gun(kullanici_id, limit=200):
     cursor = baglanti.cursor()
 
     cursor.execute("""
+    CREATE TABLE IF NOT EXISTS okunan_haberler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        okunma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
+
+    cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
         WHERE kaynak_url IN (SELECT url FROM kaynaklar)
@@ -193,6 +214,16 @@ def son_3_gun(kullanici_id, limit=200):
 def son_1_hafta(kullanici_id, limit=300):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS okunan_haberler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        okunma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
 
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 

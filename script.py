@@ -177,6 +177,11 @@ def kaynak_ekle_sor(message):
 
 
 def kaynak_ekle_kaydet(message):
+    # Kullanıcı link yazmak yerine menü butonuna bastıysa ekleme modunu iptal et:
+    if message.text in ["Son 24 Saat", "Son 3 Gün", "Son 1 Hafta", "⭐ Favoriler", "Kaynaklar"]:
+        sabit_menu_islem(message)
+        return
+
     yeni_url = message.text.strip()
     if yeni_url.startswith('/'):
         bot.process_new_messages([message])
@@ -194,7 +199,6 @@ def kaynak_ekle_kaydet(message):
         bot.reply_to(message, f"Yeni kaynak eklendi:\n{yeni_url}\n(Ekleyen: {ekleyen_kisi})",
                      reply_markup=sabit_menu_getir())
 
-
 @bot.message_handler(commands=['sil'])
 def kaynak_sil_sor(message):
     mesaj = bot.reply_to(message, "Silmek istediğiniz RSS linkini yazınız.", reply_markup=sabit_menu_getir())
@@ -202,6 +206,11 @@ def kaynak_sil_sor(message):
 
 
 def kaynak_sil_tamamla(message):
+    # Kullanıcı link yazmak yerine menü butonuna bastıysa silme modunu iptal et:
+    if message.text in ["Son 24 Saat", "Son 3 Gün", "Son 1 Hafta", "⭐ Favoriler", "Kaynaklar"]:
+        sabit_menu_islem(message)
+        return
+
     silinecek_url = message.text.strip()
     if silinecek_url.startswith('/'):
         bot.process_new_messages([message])
@@ -217,7 +226,6 @@ def kaynak_sil_tamamla(message):
         bot.reply_to(message, f"Kaynak silindi:\n{silinecek_url}", reply_markup=sabit_menu_getir())
     else:
         bot.reply_to(message, "Bu kaynak listenizde zaten bulunmuyor.", reply_markup=sabit_menu_getir())
-
 
 # --- ÖZET VE FAVORİ BUTONLARI ---
 @bot.message_handler(commands=['ozet'])
