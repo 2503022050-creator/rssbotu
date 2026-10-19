@@ -18,7 +18,6 @@ bot = telebot.TeleBot(token)
 
 # Mavi Menü (☰) Sadeleştirmesi
 bot.set_my_commands([
-    BotCommand("ozet", "Yanıtlanan haberi özetle"),
     BotCommand("ekle", "Yeni kaynak ekle"),
     BotCommand("sil", "Kayıtlı kaynak sil"),
     BotCommand("start", "Menüyü açar"),
@@ -126,14 +125,15 @@ def sabit_menu_islem(message):
         kaynaklar_getir(message)
 
 
-def haberleri_bas(chat_id, haber_listesi,kullanici_id):
+def haberleri_bas(chat_id, haber_listesi, kullanici_id):
     if not haber_listesi:
-        bot.send_message(chat_id, "Bu aralıkta haber bulunamadı.", reply_markup=sabit_menu_getir())
+        bot.send_message(chat_id, "Bu aralıkta okunmamış bir haber bulunmuyor.", reply_markup=sabit_menu_getir())
         return
 
     toplam = len(haber_listesi)
-    # Haber sayısının söylendiği ilk mesaja menüyü bağlıyoruz, ekran kapanmıyor:
     bot.send_message(chat_id, f"Toplam {toplam} haber bulundu.", reply_markup=sabit_menu_getir())
+
+    okunan_id_listesi = []
 
     for index, haber in enumerate(haber_listesi, start=1):
         haber_id, title, link, kaynak_url, ozet = haber
@@ -142,21 +142,24 @@ def haberleri_bas(chat_id, haber_listesi,kullanici_id):
         mesaj_metni = f"[{index}/{toplam}] <b>{baslik}</b>\n\n{link}\n\n<b>Kaynak:</b> {kaynak_url}"
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("⭐", callback_data=f"kaydet_{haber_id}"))
+        btn_fav = types.InlineKeyboardButton("⭐", callback_data=f"kaydet_{haber_id}")
+        btn_ozet = types.InlineKeyboardButton("📝", callback_data=f"ozet_{haber_id}")
+        markup.row(btn_fav, btn_ozet)
 
         try:
             bot.send_message(chat_id, mesaj_metni, parse_mode="HTML", disable_web_page_preview=True,
                              reply_markup=markup)
-            #Haberi ekrana bastıktan hemen sonra okundu olarak veritabanına yazıyoruz
-            db_operation.haber_okundu_isaretle(kullanici_id, haber_id)
+            okunan_id_listesi.append(haber_id)
             time.sleep(0.4)
         except Exception as e:
             print(f"Hata: {e}")
             time.sleep(1)
 
-            # DÖNGÜNÜN DIŞINA/ALTINA BU SATIRI EKLİYORUZ
-    bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
+    # 88 haberi döngüde tek tek yazmak yerine, hepsi bittiğinde TEK SORGULA veritabanına yazıyoruz:
+    if okunan_id_listesi:
+        db_operation.toplu_haber_okundu_isaretle(kullanici_id, okunan_id_listesi)
 
+    bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
 
 # --- KAYNAK YÖNETİMİ ---
 @bot.message_handler(commands=['kaynaklar'])
@@ -206,7 +209,6 @@ def kaynak_sil_sor(message):
 
 
 def kaynak_sil_tamamla(message):
-    # Kullanıcı link yazmak yerine menü butonuna bastıysa silme modunu iptal et:
     if message.text in ["Son 24 Saat", "Son 3 Gün", "Son 1 Hafta", "⭐ Favoriler", "Kaynaklar"]:
         sabit_menu_islem(message)
         return
@@ -227,35 +229,38 @@ def kaynak_sil_tamamla(message):
     else:
         bot.reply_to(message, "Bu kaynak listenizde zaten bulunmuyor.", reply_markup=sabit_menu_getir())
 
-# --- ÖZET VE FAVORİ BUTONLARI ---
-@bot.message_handler(commands=['ozet'])
-def haber_ozetle(message):
-    if message.reply_to_message is None:
-        bot.reply_to(message, "Lütfen özetlemek istediğin haberi yanıtlayarak /ozet yaz.", reply_markup=sabit_menu_getir())
-        return
-    if not message.reply_to_message.text:
-        bot.reply_to(message, "Yanıtladığın mesaj bir yazı içermiyor.", reply_markup=sabit_menu_getir())
-        return
-    yanitlanan_metin = message.reply_to_message.text
-    link_eslesme = re.search(r'https?://[^\s]+', yanitlanan_metin)
+@bot.callback_query_handler(func=lambda call: call.data.startswith('ozet_'))
+def inline_ozetle_butonu(call):
+    bot.answer_callback_query(call.id, "Haber özetleniyor...")
+
+    mesaj_metni = call.message.text
+    link_eslesme = re.search(r'https://[^\s]+', mesaj_metni)
+
     if link_eslesme is None:
-        bot.reply_to(message, "Yanıtladığın mesajda geçerli bir haber linki bulunamadı.", reply_markup=sabit_menu_getir())
+        bot.send_message(call.message.chat.id, "Bu haberde geçerli bir link bulunamadı.")
         return
+
     link = link_eslesme.group(0)
-    bekleme_mesaji = bot.reply_to(message, "Haber içeriği özetleniyor...")
+
+    bekleme_mesaji = bot.send_message(
+        call.message.chat.id,
+        "Haber içeriği ve özetleniyor...",
+        reply_to_message_id=call.message.message_id
+    )
+
     detay_metni = scraper.haberin_icine_gir(link)
     if not detay_metni or len(detay_metni) < 50:
-        detay_metni = yanitlanan_metin
+        detay_metni = mesaj_metni
+
     gonderilecek_metin = f"Aşağıdaki haberi Türkçe olarak kısa ve öz şekilde özetle:\n\n{detay_metni}"
     ozet_sonucu = ozetle(gonderilecek_metin)
+
     bot.edit_message_text(
         chat_id=bekleme_mesaji.chat.id,
         message_id=bekleme_mesaji.message_id,
         text=f"<b>Haber Özeti:</b>\n\n{ozet_sonucu}",
         parse_mode="HTML"
     )
-
-
 @bot.callback_query_handler(func=lambda call: call.data.startswith('kaydet_'))
 def buton(call):
     haber_numarasi = call.data.split('_')[1]
