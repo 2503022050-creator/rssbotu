@@ -237,7 +237,8 @@ def inline_ozetle_butonu(call):
     link_eslesme = re.search(r'https://[^\s]+', mesaj_metni)
 
     if link_eslesme is None:
-        bot.send_message(call.message.chat.id, "Bu haberde geçerli bir link bulunamadı.")
+        bot.send_message(call.message.chat.id, "Bu haberde geçerli bir link bulunamadı.",
+                         reply_markup=sabit_menu_getir())
         return
 
     link = link_eslesme.group(0)
@@ -245,7 +246,8 @@ def inline_ozetle_butonu(call):
     bekleme_mesaji = bot.send_message(
         call.message.chat.id,
         "Haber içeriği ve özetleniyor...",
-        reply_to_message_id=call.message.message_id
+        reply_to_message_id=call.message.message_id,
+        reply_markup=sabit_menu_getir()
     )
 
     detay_metni = scraper.haberin_icine_gir(link)
@@ -255,11 +257,22 @@ def inline_ozetle_butonu(call):
     gonderilecek_metin = f"Aşağıdaki haberi Türkçe olarak kısa ve öz şekilde özetle:\n\n{detay_metni}"
     ozet_sonucu = ozetle(gonderilecek_metin)
 
-    bot.edit_message_text(
-        chat_id=bekleme_mesaji.chat.id,
-        message_id=bekleme_mesaji.message_id,
-        text=f"<b>Haber Özeti:</b>\n\n{ozet_sonucu}",
-        parse_mode="HTML"
+    # Yapay zekadan gelen metindeki tehlikeli karakterleri (<, >) temizliyoruz
+    temiz_ozet = html.escape(str(ozet_sonucu))
+
+    try:
+        # Önce mesajı temizlenmiş özetle güncellemeyi deniyoruz
+        bot.edit_message_text(
+            chat_id=bekleme_mesaji.chat.id,
+            message_id=bekleme_mesaji.message_id,
+            text=f"<b>✨ Yapay Zeka Özeti:</b>\n\n{temiz_ozet}",
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        bot.send_message(
+            call.message.chat.id,
+            f"✨ Yapay Zeka Özeti:\n\n{ozet_sonucu}",
+            reply_markup=sabit_menu_getir()
     )
 @bot.callback_query_handler(func=lambda call: call.data.startswith('kaydet_'))
 def buton(call):
@@ -285,7 +298,7 @@ def favori_sil_butonu(call):
 # --- ARKA PLAN OTOMASYONU VE ÇALIŞTIRMA ---
 def saatlik_tarama():
     while True:
-        print("⏳ Arka plan taraması tetiklendi (Sessiz mod).")
+        print("Arka plan taraması tetiklendi (Sessiz mod).")
         calistir(bildirim=False)
         time.sleep(3600)
 
