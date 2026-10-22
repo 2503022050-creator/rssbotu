@@ -155,11 +155,15 @@ def haberleri_bas(chat_id, haber_listesi, kullanici_id):
             print(f"Hata: {e}")
             time.sleep(1)
 
-    # 88 haberi döngüde tek tek yazmak yerine, hepsi bittiğinde TEK SORGULA veritabanına yazıyoruz:
-    if okunan_id_listesi:
-        db_operation.toplu_haber_okundu_isaretle(kullanici_id, okunan_id_listesi)
+        # 88 haberi döngüde tek tek yazmak yerine, hepsi bittiğinde TEK SORGULA veritabanına yazıyoruz:
+        if okunan_id_listesi:
+            try:
+                db_operation.toplu_haber_okundu_isaretle(kullanici_id, okunan_id_listesi)
+            except Exception as e:
+                print(f"Veritabanı okundu işaretleme hatası: {e}")
 
-    bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
+        # Veritabanı hata verse bile menü her zaman geri gelecek
+        bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
 
 # --- KAYNAK YÖNETİMİ ---
 @bot.message_handler(commands=['kaynaklar'])

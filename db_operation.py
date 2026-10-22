@@ -96,7 +96,6 @@ def son_haberleri_getir(kullanici_id, limit=100):
     baglanti = baglanti_get()
     cursor = baglanti.cursor()
 
-    # 1. Sorgu atmadan önce tablonun var olduğundan emin oluyoruz
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS okunan_haberler (
         id SERIAL PRIMARY KEY,
@@ -107,12 +106,10 @@ def son_haberleri_getir(kullanici_id, limit=100):
     );
     """)
 
-    # 2. Tablo garanti edildikten sonra sorguyu güvenle çalıştırıyoruz
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
-        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
-          AND added_at >= NOW() - INTERVAL '24 hours'
+        WHERE added_at >= NOW() - INTERVAL '24 hours'
           AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
         ORDER BY id DESC 
         LIMIT %s;
@@ -199,8 +196,7 @@ def son_3_gun(kullanici_id, limit=200):
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
-        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
-          AND added_at >= NOW() - INTERVAL '3 DAYS'
+        WHERE added_at >= NOW() - INTERVAL '3 DAYS'
           AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
         ORDER BY id DESC LIMIT %s;
     """, (kullanici_id, limit))
@@ -228,8 +224,7 @@ def son_1_hafta(kullanici_id, limit=300):
     cursor.execute("""
         SELECT id, title, link, kaynak_url, ozet 
         FROM haberler 
-        WHERE kaynak_url IN (SELECT url FROM kaynaklar)
-          AND added_at >= NOW() - INTERVAL '7 DAYS'
+        WHERE added_at >= NOW() - INTERVAL '7 DAYS'
           AND id NOT IN (SELECT haber_id FROM okunan_haberler WHERE kullanici_id = %s)
         ORDER BY id DESC LIMIT %s;
     """, (kullanici_id, limit))
@@ -264,4 +259,29 @@ def haber_okundu_isaretle(kullanici_id, haber_id):
     cursor.close()
     baglanti.close()
 
+def toplu_haber_okundu_isaretle(kullanici_id, haber_id_listesi):
+    if not haber_id_listesi:
+        return
+    baglanti = baglanti_get()
+    cursor = baglanti.cursor()
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS okunan_haberler (
+        id SERIAL PRIMARY KEY,
+        kullanici_id BIGINT NOT NULL,
+        haber_id INTEGER NOT NULL REFERENCES haberler(id),
+        okunma_tarihi TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(kullanici_id, haber_id)
+    );
+    """)
+
+    kayitlar = [(kullanici_id, h_id) for h_id in haber_id_listesi]
+    cursor.executemany("""
+        INSERT INTO okunan_haberler (kullanici_id, haber_id)
+        VALUES (%s, %s)
+        ON CONFLICT (kullanici_id, haber_id) DO NOTHING;
+    """, kayitlar)
+
+    baglanti.commit()
+    cursor.close()
+    baglanti.close()
