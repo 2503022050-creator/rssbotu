@@ -156,14 +156,14 @@ def haberleri_bas(chat_id, haber_listesi, kullanici_id):
             time.sleep(1)
 
         # 88 haberi döngüde tek tek yazmak yerine, hepsi bittiğinde TEK SORGULA veritabanına yazıyoruz:
-        if okunan_id_listesi:
-            try:
-                db_operation.toplu_haber_okundu_isaretle(kullanici_id, okunan_id_listesi)
-            except Exception as e:
-                print(f"Veritabanı okundu işaretleme hatası: {e}")
+    if okunan_id_listesi:
+        try:
+            db_operation.toplu_haber_okundu_isaretle(kullanici_id, okunan_id_listesi)
+        except Exception as e:
+            print(f"Veritabanı okundu işaretleme hatası: {e}")
 
         # Veritabanı hata verse bile menü her zaman geri gelecek
-        bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
+    bot.send_message(chat_id, "Tüm haberler listelendi.", reply_markup=sabit_menu_getir())
 
 # --- KAYNAK YÖNETİMİ ---
 @bot.message_handler(commands=['kaynaklar'])
@@ -247,11 +247,11 @@ def inline_ozetle_butonu(call):
 
     link = link_eslesme.group(0)
 
+    # 1. Bekleme mesajı gönderilir
     bekleme_mesaji = bot.send_message(
         call.message.chat.id,
-        "Haber içeriği ve özetleniyor...",
-        reply_to_message_id=call.message.message_id,
-        reply_markup=sabit_menu_getir()
+        "⏳ Haber içeriği alınıyor ve özetleniyor...",
+        reply_to_message_id=call.message.message_id
     )
 
     detay_metni = scraper.haberin_icine_gir(link)
@@ -261,23 +261,16 @@ def inline_ozetle_butonu(call):
     gonderilecek_metin = f"Aşağıdaki haberi Türkçe olarak kısa ve öz şekilde özetle:\n\n{detay_metni}"
     ozet_sonucu = ozetle(gonderilecek_metin)
 
-    # Yapay zekadan gelen metindeki tehlikeli karakterleri (<, >) temizliyoruz
-    temiz_ozet = html.escape(str(ozet_sonucu))
-
+    # 2. Mesaj silinmez, doğrudan o balonun içindeki yazı güncellenir (Toz efekti olmaz)
     try:
-        # Önce mesajı temizlenmiş özetle güncellemeyi deniyoruz
         bot.edit_message_text(
+            text=f"✨ Yapay Zeka Özeti:\n\n{ozet_sonucu}",
             chat_id=bekleme_mesaji.chat.id,
-            message_id=bekleme_mesaji.message_id,
-            text=f"<b>✨ Yapay Zeka Özeti:</b>\n\n{temiz_ozet}",
-            parse_mode="HTML"
+            message_id=bekleme_mesaji.message_id
         )
     except Exception as e:
-        bot.send_message(
-            call.message.chat.id,
-            f"✨ Yapay Zeka Özeti:\n\n{ozet_sonucu}",
-            reply_markup=sabit_menu_getir()
-    )
+        # Hata olursa konsolda görebilmek için yazdırıyoruz
+        print(f"Edit hatası: {e}")
 @bot.callback_query_handler(func=lambda call: call.data.startswith('kaydet_'))
 def buton(call):
     haber_numarasi = call.data.split('_')[1]
